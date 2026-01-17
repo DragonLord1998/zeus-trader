@@ -17,6 +17,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 pip install numpy pandas yfinance ta scikit-learn lxml html5lib
 
 # 4. Run Evolution Mission
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 echo "🧬 Starting Zeus Genetic Engine..."
 python3 -u zeus_evo.py
 

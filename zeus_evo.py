@@ -146,7 +146,7 @@ def evaluate_genome(genome, X_train, y_train, X_val, y_val):
         criterion = nn.MSELoss()
         
         # Manual Batching on GPU tensors (No DataLoader overhead)
-        BATCH_SIZE = 4096
+        BATCH_SIZE = 1024 # Reduced from 4096 to prevent OOM
         N = len(X_train)
         
         scaler = torch.cuda.amp.GradScaler()
@@ -183,6 +183,10 @@ def evaluate_genome(genome, X_train, y_train, X_val, y_val):
     except Exception as e:
         print(f"💀 Genome Died: {e}", flush=True)
         return float('inf'), None
+    finally:
+        # Crucial for Parallel Execution: Release VRAM immediately
+        del model, optimizer, scaler
+        torch.cuda.empty_cache()
 
 def run_evolution():
     print(f"\n🧬 Starting Evolution: {GENERATIONS} Generations, {POPULATION_SIZE} Population", flush=True)
@@ -207,8 +211,9 @@ def run_evolution():
         print(f"\n⏳ Generation {gen+1}/{GENERATIONS}", flush=True)
         
         scores = []
-        # A5000 can handle 10+ small transformers easily
-        MAX_PARALLEL = 10
+        scores = []
+        # OOM Fix: Reduced parallel threads from 10 -> 4 to prevent VRAM saturation
+        MAX_PARALLEL = 4
         print(f"   [System] Spawning {MAX_PARALLEL} parallel training threads...", flush=True)
         
         with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as executor:
