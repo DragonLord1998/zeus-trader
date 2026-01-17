@@ -30,6 +30,8 @@ module.exports = {
   model: {
     lookBackPeriod: 60, // Days of history to look at
     epochs: 30,         // Training iterations
-    batchSize: 32
+    batchSize: 2048,     // Full Batch Gradient Descent
+    lstmUnits: 512,      // Big Brain
+    lstmLayerCount: 4    // Deep Learning
   }
 };

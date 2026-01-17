@@ -3,18 +3,30 @@ const config = require('./config');
 
 function createModel(inputShape) {
   const model = tf.sequential();
+  const units = config.model.lstmUnits || 50; 
+  const layers = config.model.lstmLayerCount || 2;
 
+  // Layer 1: Must define inputShape
   model.add(tf.layers.lstm({
-    units: 50,
-    returnSequences: true, // Pass sequences to the next LSTM layer if we had one, or False if next is Dense
+    units: units,
+    returnSequences: true, // Must be true if more layers follow
     inputShape: inputShape
   }));
-  
   model.add(tf.layers.dropout({ rate: 0.2 }));
 
+  // Hidden Layers (2 to N-1)
+  for (let i = 1; i < layers - 1; i++) {
+      model.add(tf.layers.lstm({
+        units: units,
+        returnSequences: true // Pass sequence to next
+      }));
+      model.add(tf.layers.dropout({ rate: 0.2 }));
+  }
+
+  // Final LSTM Layer
   model.add(tf.layers.lstm({
-    units: 50,
-    returnSequences: false
+    units: units,
+    returnSequences: false // Output vector, not sequence
   }));
 
   model.add(tf.layers.dense({ units: 1 })); // Predict 1 value (Price)
