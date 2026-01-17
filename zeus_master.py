@@ -183,91 +183,208 @@ def train_and_evaluate(df, config_override={}):
     trades = 0
     wins = 0
     
-    # Simulation
-    # X_test[i] corresponds to predicting price at i (which is real_close_prices[i])
-    # Last known close is X_test[i][-1][0] (Scaled) -> we need to check relative movement
+        # Simulation
     
-    for i in range(len(predictions_scaled)):
-        if i == 0: continue
+        trade_log = []
+    
         
-        # Logic: Compare Prediction[i] with Last Known Price (Test Data i-1 close)
-        # But predictions_scaled[i] predicts state at time i.
-        # Last known was state at i-1.
+    
+        for i in range(len(predictions_scaled)):
+    
+            if i == 0: continue
+    
+            
+    
+            last_close_scaled = X_test[i][-1][0]
+    
+            pred_scaled = predictions_scaled[i]
+    
+            current_price_real = real_close_prices[i]
+    
+            date_idx = split_idx + i 
+    
+            # We assume df index matches. (Approximate for logging)
+    
+            
+    
+            action = "HOLD"
+    
+            
+    
+            # Decide
+    
+            if pred_scaled > last_close_scaled * (1 + threshold):
+    
+                # Buy
+    
+                if balance > current_price_real:
+    
+                    can_buy = balance // current_price_real
+    
+                    balance -= can_buy * current_price_real
+    
+                    shares += can_buy
+    
+                    action = "BUY"
+    
+                    trade_log.append(f"🟢 BUY  @ {current_price_real:.2f} (Pred: UP)")
+    
+                    
+    
+            elif pred_scaled < last_close_scaled * (1 - threshold):
+    
+                # Sell
+    
+                if shares > 0:
+    
+                    balance += shares * current_price_real
+    
+                    # Calc profit for this trade
+    
+                    # Simplified: we don't track specific lots here, just total balance change
+    
+                    action = "SELL"
+    
+                    trade_log.append(f"🔴 SELL @ {current_price_real:.2f} (Pred: DOWN)")
+    
+                    shares = 0
+    
+                    
+    
+            # Win Rate Check (Direction)
+    
+            if i > 0:
+    
+                actual_move = real_close_prices[i] > real_close_prices[i-1]
+    
+                pred_move = pred_scaled > last_close_scaled
+    
+                if action != "HOLD" and (actual_move == pred_move):
+    
+                    wins += 1
+    
+                if action != "HOLD":
+    
+                    trades += 1
+    
+                    
+    
+        # Final Value
+    
+        final_value = balance + (shares * real_close_prices[-1])
+    
+        roi = ((final_value - 100000) / 100000) * 100
+    
         
-        # Reconstruct "Last Close" from the input sequence
-        # The input sequence X_test[i] is [t-60 ... t-1]
-        # So the last price seen is X_test[i][-1][0] (Assuming Close is index 0)
-        last_close_scaled = X_test[i][-1][0]
-        pred_scaled = predictions_scaled[i]
+    
+        return {
+    
+            "roi": roi,
+    
+            "trades": trades,
+    
+            "win_rate": (wins/trades*100) if trades > 0 else 0,
+    
+            "logs": trade_log
+    
+        }
+    
+    
+    
+    # --- MAIN EXECUTION ---
+    
+    if __name__ == "__main__":
+    
+        df = fetch_data()
+    
+        df = add_features(df)
+    
         
-        current_price_real = real_close_prices[i]
+    
+        print("\n🔍 STARTING GRID SEARCH OPTIMIZATION...")
+    
         
-        action = "HOLD"
+    
+        # REFINED Grid Search Options based on previous success
+    
+        param_grid = [
+    
+            # The Baseline Winner
+    
+            {"units": 512, "layers": 4, "threshold": 0.005},
+    
+            
+    
+            # Variations around the winner
+    
+            {"units": 256, "layers": 4, "threshold": 0.005}, # Lighter model
+    
+            {"units": 512, "layers": 3, "threshold": 0.005}, # Shallower
+    
+            {"units": 512, "layers": 5, "threshold": 0.005}, # Deeper
+    
+            
+    
+            # Threshold Tuning
+    
+            {"units": 512, "layers": 4, "threshold": 0.004}, # More aggressive
+    
+            {"units": 512, "layers": 4, "threshold": 0.006}, # More conservative
+    
+            
+    
+            # The "Tank" v2 (Better threshold)
+    
+            {"units": 1024, "layers": 4, "threshold": 0.004} 
+    
+        ]
+    
         
-        # Decide
-        if pred_scaled > last_close_scaled * (1 + threshold):
-            # Buy
-            if balance > current_price_real:
-                can_buy = balance // current_price_real
-                balance -= can_buy * current_price_real
-                shares += can_buy
-                action = "BUY"
-                
-        elif pred_scaled < last_close_scaled * (1 - threshold):
-            # Sell
-            if shares > 0:
-                balance += shares * current_price_real
-                shares = 0
-                action = "SELL"
-                
-        # Win Rate Check (Direction)
-        if i > 0:
-            actual_move = real_close_prices[i] > real_close_prices[i-1]
-            pred_move = pred_scaled > last_close_scaled
-            if action != "HOLD" and (actual_move == pred_move):
-                wins += 1
-            if action != "HOLD":
-                trades += 1
-                
-    # Final Value
-    final_value = balance + (shares * real_close_prices[-1])
-    roi = ((final_value - 100000) / 100000) * 100
     
-    return {
-        "roi": roi,
-        "trades": trades,
-        "win_rate": (wins/trades*100) if trades > 0 else 0
-    }
-
-# --- MAIN EXECUTION ---
-if __name__ == "__main__":
-    df = fetch_data()
-    df = add_features(df)
+        results = []
     
-    print("\n🔍 STARTING GRID SEARCH OPTIMIZATION...")
+        
     
-    # Grid Search Options
-    param_grid = [
-        {"units": 128, "layers": 2, "threshold": 0.005},
-        {"units": 512, "layers": 2, "threshold": 0.003},
-        {"units": 512, "layers": 4, "threshold": 0.005}, # The "Big Brain" 
-        {"units": 1024, "layers": 4, "threshold": 0.002} # The "Tank"
-    ]
+        for params in param_grid:
     
-    results = []
+            print(f"\n🧪 Testing Config: {params}")
     
-    for params in param_grid:
-        print(f"\n🧪 Testing Config: {params}")
-        try:
-            res = train_and_evaluate(df, params)
-            print(f"   👉 ROI: {res['roi']:.2f}% | Trades: {res['trades']} | WR: {res['win_rate']:.1f}%")
-            results.append({**params, **res})
-        except Exception as e:
-            print(f"   ❌ Failed: {e}")
-            import traceback
-            traceback.print_exc()
-
-    # Sort best
-    results.sort(key=lambda x: x['roi'], reverse=True)
-    print("\n🏆 BEST CONFIGURATION:")
-    print(results[0])
+            try:
+    
+                res = train_and_evaluate(df, params)
+    
+                print(f"   👉 ROI: {res['roi']:.2f}% | Trades: {res['trades']} | WR: {res['win_rate']:.1f}%")
+    
+                if res['trades'] > 0:
+    
+                    print(f"      Last 3 Trades: {res['logs'][-3:]}")
+    
+                results.append({**params, **res})
+    
+            except Exception as e:
+    
+                print(f"   ❌ Failed: {e}")
+    
+                # import traceback
+    
+                # traceback.print_exc()
+    
+    
+    
+        # Sort best
+    
+        results.sort(key=lambda x: x['roi'], reverse=True)
+    
+        print("\n🏆 BEST CONFIGURATION:")
+    
+        best = results[0]
+    
+        print(best)
+    
+        print("\n📜 Full Trade Log for Best Run:")
+    
+        for log in best['logs']:
+    
+            print(log)
+    
+    
