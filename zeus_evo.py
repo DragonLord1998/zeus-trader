@@ -184,7 +184,7 @@ def evaluate_genome(genome, X_train, y_train, X_val, y_val):
         criterion = nn.MSELoss()
         
         train_ds = TensorDataset(torch.tensor(X_train), torch.tensor(y_train))
-        loader = DataLoader(train_ds, batch_size=2048, shuffle=True)
+        loader = DataLoader(train_ds, batch_size=512, shuffle=True)
         
         scaler = torch.cuda.amp.GradScaler()
         
@@ -232,14 +232,15 @@ def run_evolution():
     best_ever_score = float('inf')
     best_ever_genome = None
     
+    print("🐛 Debug: Entering Generation Loop...", flush=True)
+
     for gen in range(GENERATIONS):
-        print(f"\n⏳ Generation {gen+1}/{GENERATIONS}")
+        print(f"\n⏳ Generation {gen+1}/{GENERATIONS}", flush=True)
         
         # Evaluate Population
         scores = []
-        # TODO: Parallelize this loop using ProcessPoolExecutor for true GPU sat
-        # Currently sequential but fast due to short epochs
         for i, genome in enumerate(population):
+            print(f"   [Debug] Evaluating Genome {i+1}...", end="", flush=True)
             score, weights = evaluate_genome(genome, X_train, y_train, X_val, y_val)
             scores.append((score, genome, weights))
             print(f"   Input {i+1}: Loss {score:.6f} | Gene: {genome}")
