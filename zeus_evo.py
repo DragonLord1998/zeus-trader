@@ -286,3 +286,6 @@ def run_evolution():
     from verification_gauntlet import run_gauntlet
     run_gauntlet()
 
+if __name__ == "__main__":
+    run_evolution()
+
