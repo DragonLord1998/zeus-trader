@@ -18,5 +18,5 @@ pip install numpy pandas yfinance ta scikit-learn lxml html5lib
 
 # 4. Run Evolution Mission
 echo "🧬 Starting Zeus Genetic Engine..."
-python3 zeus_evo.py
+python3 -u zeus_evo.py
 

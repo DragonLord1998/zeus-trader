@@ -30,9 +30,10 @@ from torch.utils.data import DataLoader, TensorDataset
 from concurrent.futures import ThreadPoolExecutor
 
 # --- CONFIGURATION ---
-GENERATIONS = 10
-POPULATION_SIZE = 20
-SURVIVORS = 5  # Top 5 make it to next gen purely
+GENERATIONS = 2    # Smoke Test
+POPULATION_SIZE = 5 # Smoke Test
+SURVIVORS = 2
+MUTATION_RATE = 0.3
 MUTATION_RATE = 0.3
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -141,7 +142,7 @@ for res in results:
         
 GLOBAL_X = np.concatenate(all_X)
 GLOBAL_Y = np.concatenate(all_y)
-print(f"📚 Dataset: {GLOBAL_X.shape[0]} samples")
+print(f"📚 Dataset: {GLOBAL_X.shape[0]} samples", flush=True)
 
 # --- MODEL ---
 class PositionalEncoding(nn.Module):
