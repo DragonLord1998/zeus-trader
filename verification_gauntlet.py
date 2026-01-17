@@ -87,14 +87,23 @@ def backtest_stock(symbol, model, genome, lookback=60):
                 pass
             
             # For aggregate scoring, let's just use Signal Accuracy
-            # Directional Accuracy
-            true_next_ret = full_feats[i][0] # Using normalized log ret as proxy for direction
-            if (pred > 0 and true_next_ret > 0) or (pred < 0 and true_next_ret < 0):
-                signals.append(1)
-            else:
-                signals.append(0)
+            # SNIPER MODE: Only trade if confidence is high
+            # We predict log returns. 0.002 = ~0.2% moves.
+            THRESHOLD = 0.0015 
+            
+            if abs(pred) < THRESHOLD:
+                continue # No trade (Hold cash)
                 
-        if not signals: return None
+            # Directional Accuracy (Active Trades Only)
+            true_next_ret = full_feats[i][0] 
+            
+            if (pred > 0 and true_next_ret > 0) or (pred < 0 and true_next_ret < 0):
+                signals.append(1) # Win
+            else:
+                signals.append(0) # Loss
+                
+        if not signals: 
+            return {"symbol": symbol, "win_rate": 0.0, "trades": 0}
         
         win_rate = sum(signals) / len(signals)
         return {"symbol": symbol, "win_rate": win_rate, "trades": len(signals)}
