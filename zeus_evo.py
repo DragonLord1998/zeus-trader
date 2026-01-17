@@ -140,20 +140,27 @@ class EvoTransformer(nn.Module):
 # --- EVALUATION ---
 def evaluate_genome(genome, X_train, y_train, X_val, y_val):
     try:
+        # X_train, y_train are already on GPU
         model = EvoTransformer(genome, input_dim=X_train.shape[2]).to(DEVICE)
         optimizer = torch.optim.AdamW(model.parameters(), lr=genome['lr'])
         criterion = nn.MSELoss()
         
-        train_ds = TensorDataset(torch.tensor(X_train), torch.tensor(y_train))
-        # Large batch size for speed
-        loader = DataLoader(train_ds, batch_size=2048, shuffle=True, num_workers=4, persistent_workers=True)
+        # Manual Batching on GPU tensors (No DataLoader overhead)
+        BATCH_SIZE = 4096
+        N = len(X_train)
         
         scaler = torch.cuda.amp.GradScaler()
         
         model.train()
         for epoch in range(5):
-            for bx, by in loader:
-                bx, by = bx.to(DEVICE), by.to(DEVICE)
+            # Shuffle indices on GPU
+            indices = torch.randperm(N, device=DEVICE)
+            
+            for i in range(0, N, BATCH_SIZE):
+                idx = indices[i:i+BATCH_SIZE]
+                bx = X_train[idx]
+                by = y_train[idx]
+                
                 optimizer.zero_grad()
                 with torch.cuda.amp.autocast():
                     loss = criterion(model(bx).squeeze(), by)
@@ -164,13 +171,14 @@ def evaluate_genome(genome, X_train, y_train, X_val, y_val):
         model.eval()
         val_loss = 0
         with torch.no_grad():
-            val_loader = DataLoader(TensorDataset(torch.tensor(X_val), torch.tensor(y_val)), batch_size=4096)
-            for bx, by in val_loader:
-                bx, by = bx.to(DEVICE), by.to(DEVICE)
+            # Large validation batch
+            for i in range(0, len(X_val), 8192):
+                bx = X_val[i:i+8192]
+                by = y_val[i:i+8192]
                 pred = model(bx).squeeze()
-                val_loss += criterion(pred, by).item()
+                val_loss += criterion(pred, by).item() * len(bx)
         
-        score = val_loss / len(val_loader)
+        score = val_loss / len(X_val)
         return score, model.state_dict()
     except Exception as e:
         print(f"💀 Genome Died: {e}", flush=True)
