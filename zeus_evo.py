@@ -190,8 +190,13 @@ def run_evolution():
     population = [random_genome() for _ in range(POPULATION_SIZE)]
     
     split = int(0.9 * len(GLOBAL_X))
-    X_train, X_val = GLOBAL_X[:split], GLOBAL_X[split:]
-    y_train, y_val = GLOBAL_Y[:split], GLOBAL_Y[split:]
+    
+    # 🚀 VRAM OPTIMIZATION: Upload entire dataset to GPU once
+    print("🚀 Moving entire dataset to GPU VRAM...", flush=True)
+    X_train = torch.tensor(GLOBAL_X[:split], dtype=torch.float32).to(DEVICE)
+    y_train = torch.tensor(GLOBAL_Y[:split], dtype=torch.float32).to(DEVICE)
+    X_val = torch.tensor(GLOBAL_X[split:], dtype=torch.float32).to(DEVICE)
+    y_val = torch.tensor(GLOBAL_Y[split:], dtype=torch.float32).to(DEVICE)
     
     best_ever_score = float('inf')
     best_ever_genome = None
@@ -202,7 +207,8 @@ def run_evolution():
         print(f"\n⏳ Generation {gen+1}/{GENERATIONS}", flush=True)
         
         scores = []
-        MAX_PARALLEL = 4
+        # A5000 can handle 10+ small transformers easily
+        MAX_PARALLEL = 10
         print(f"   [System] Spawning {MAX_PARALLEL} parallel training threads...", flush=True)
         
         with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as executor:
