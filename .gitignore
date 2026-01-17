@@ -1,5 +1,8 @@
-node_modules/
+zeus_env/
+__pycache__/
+*.pyc
 .DS_Store
-.env
-*.log
-optimization-results.json
+*.zip
+*.tar.gz
+benchmark_results_*.json
+ultimate_scan_results.json
