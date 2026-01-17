@@ -279,8 +279,8 @@ def run_evolution():
     print(f"Loss: {best_ever_score}")
     print("="*60)
     
-    # Verification using The Gauntlet (Backtest on 50 stocks last 12 months)
-    # verify_king() - To be implemented
-    
-if __name__ == "__main__":
-    run_evolution()
+
+    # Verification using The Gauntlet
+    from verification_gauntlet import run_gauntlet
+    run_gauntlet()
+

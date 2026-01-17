@@ -16,6 +16,7 @@ pip install --upgrade pip
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 pip install numpy pandas yfinance ta scikit-learn lxml html5lib
 
-# 4. Run Master Script
-echo "🔥 Starting Global Model Training..."
-python3 zeus_cloud_master.py
+# 4. Run Evolution Mission
+echo "🧬 Starting Zeus Genetic Engine..."
+python3 zeus_evo.py
+
