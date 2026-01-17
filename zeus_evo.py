@@ -185,7 +185,8 @@ def evaluate_genome(genome, X_train, y_train, X_val, y_val):
         criterion = nn.MSELoss()
         
         train_ds = TensorDataset(torch.tensor(X_train), torch.tensor(y_train))
-        loader = DataLoader(train_ds, batch_size=512, shuffle=True)
+        # Drastically increased batch size and workers for speed
+        loader = DataLoader(train_ds, batch_size=2048, shuffle=True, num_workers=4, persistent_workers=True)
         
         scaler = torch.cuda.amp.GradScaler()
         
