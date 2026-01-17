@@ -21,9 +21,18 @@ const featureSets = [
 async function runOptimizer() {
     // Init Backend
     try {
-        require('@tensorflow/tfjs-backend-wasm');
-        await tf.setBackend('wasm');
-    } catch(e) { console.log('WASM not found, using default CPU'); }
+        // Try to load the Node.js backend (C++ / GPU)
+        // This works for both @tensorflow/tfjs-node and @tensorflow/tfjs-node-gpu
+        const tfNode = require('@tensorflow/tfjs-node-gpu'); 
+        console.log(`✅ Loaded TensorFlow Node GPU Backend: ${tf.version.tfjs}`);
+    } catch(e) { 
+        try {
+             require('@tensorflow/tfjs-node'); // Fallback to CPU C++
+             console.log('⚠️ Loaded TensorFlow Node CPU Backend (No GPU found)');
+        } catch (e2) {
+             console.log('⚠️ C++ bindings not found. Using default JS (Slow).'); 
+        }
+    }
 
     console.log('🚀 ZEUS OPTIMIZER: Starting Grid Search...');
     const results = [];
