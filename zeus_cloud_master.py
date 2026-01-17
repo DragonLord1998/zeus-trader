@@ -46,15 +46,47 @@ GRID_SEARCH_SPACE = {
 # --- DATA PIPELINE (Same as before) ---
 # ... (Reusing robust fetching logic)
 
+
 def get_nifty_200_symbols():
+    """
+    Robust Nifty 200 Fetcher.
+    Prioritizes: 1. CSV, 2. Wikipedia (Nifty 50), 3. Hardcoded Top 20
+    """
+    symbols = []
+    
+    # 1. Try CSV
     csv_path = "Market Data/MW-NIFTY-200-17-Jan-2026.csv"
     if os.path.exists(csv_path):
         try:
             df = pd.read_csv(csv_path, header=None, skiprows=1)
-            symbols = [str(x).strip().replace('"','') + ".NS" for x in df[0].tolist()]
-            return [s for s in symbols if "NIFTY" not in s]
+            raw = [str(x).strip().replace('"','') for x in df[0].tolist()]
+            symbols = [f"{s}.NS" for s in raw if "NIFTY" not in s]
+            print(f"✅ Loaded {len(symbols)} from CSV")
+            return symbols
         except: pass
-    return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"]
+
+    # 2. Try Wikipedia (Nifty 50 is reliable, Nifty 200 pages vary)
+    print("⚠️ CSV not found. Attempting to fetch Nifty 50 from Wikipedia...")
+    try:
+        tables = pd.read_html('https://en.wikipedia.org/wiki/NIFTY_50')
+        # Table 1 usually contains the components
+        df = tables[1] 
+        if 'Symbol' in df.columns:
+            symbols = [f"{s}.NS" for s in df['Symbol'].tolist()]
+            print(f"✅ Fetched {len(symbols)} from Wikipedia")
+            return symbols
+    except Exception as e:
+        print(f"   ⚠️ Wikipedia Data Fetch Failed: {e}")
+
+    # 3. Fallback to Hardcoded Top 20 (Better than 5)
+    print("⚠️ Web fetch failed. Using Hardcoded Top 20.")
+    return [
+        "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
+        "HINDUNILVR.NS", "ITC.NS", "SBIN.NS", "BHARTIARTL.NS", "KOTAKBANK.NS",
+        "LTO.NS", "AXISBANK.NS", "ASIANPAINT.NS", "MARUTI.NS", "TITAN.NS",
+        "ULTRACEMCO.NS", "BAJFINANCE.NS", "SUNPHARMA.NS", "WIPRO.NS", "HCLTECH.NS"
+    ]
+
 
 def fetch_and_process_stock(symbol):
     try:

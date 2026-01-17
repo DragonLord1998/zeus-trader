@@ -95,22 +95,21 @@ def get_deep_metrics(symbol: str) -> Dict:
         }
 
 
-def scan_stock_initial(symbol: str, lookback: int = 60) -> Optional[Dict]:
+
     """
-    Fast initial scan using only Price + Techs + LSTM.
+    Fast initial scan using Pre-Trained Transformer OR Fallback LSTM.
     """
     try:
-        # Fetch 1000 days for stability
         from datetime import datetime, timedelta
+        import os
+        from model import ZeusTransformer # Import Transformer
+        
+        # Fetch 1000 days for stability
         start_date = (datetime.now() - timedelta(days=1000)).strftime('%Y-%m-%d')
         df = yf.download(symbol, start=start_date, progress=False)
         
-        if df.empty or len(df) < 300:
-            return None
-        
-        # Handle MultiIndex
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
+        if df.empty or len(df) < 300: return None
+        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
             
         # Indicators
         df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
@@ -118,34 +117,78 @@ def scan_stock_initial(symbol: str, lookback: int = 60) -> Optional[Dict]:
         df['MACD'] = macd.macd_diff()
         df['SMA_50'] = ta.trend.sma_indicator(df['Close'], window=50)
         df['SMA_200'] = ta.trend.sma_indicator(df['Close'], window=200)
-        
         df = df.dropna()
-        if len(df) < lookback + 50:
-            return None
+        if len(df) < lookback + 50: return None
+
+        # --- PREDICT ---
+        predicted_change = 0
+        model_path = '/Users/philipmathewkavalam/Desktop/Zeus Trader/zeus_core/zeus_best_model.pth' # Local Path
+        
+        # 1. Check for Pre-Trained Brain 🧠
+        if os.path.exists(model_path):
+            # Use TRANSFOMER (128, 2, 8) - Winner Config
+            # Must replicate Cloud Feature Engineering EXACTLY
+            df_inf = df.copy()
+            df_inf['ret'] = np.log(df_inf['Close'] / df_inf['Close'].shift(1))
+            df_inf['macd_norm'] = (df_inf['MACD'] - df_inf['MACD'].rolling(200).mean()) / (df_inf['MACD'].rolling(200).std() + 1e-6)
+            df_inf['vol_roll'] = df_inf['Close'].pct_change().rolling(20).std()
+            df_inf['rsi_norm'] = df_inf['RSI'] / 100.0
             
-        # LSTM prediction
-        feature_cols = ['Close', 'Volume', 'RSI', 'MACD', 'SMA_50']
-        available_cols = [c for c in feature_cols if c in df.columns]
-        
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        scaled_data = scaler.fit_transform(df[available_cols].values)
-        
-        train_data = scaled_data[:-5]
-        test_data = scaled_data[-lookback-5:]
-        
-        X_train, y_train = create_sequences(train_data, lookback)
-        X_test, y_test = create_sequences(test_data, lookback)
-        
-        if len(X_train) < 50: return None
-        
-        # Fast Model
-        model = ZeusLSTM(len(available_cols), 128, 2, dropout=0.2).to(device)
-        train_model(model, X_train, y_train, epochs=5, verbose=False)
-        predictions = predict(model, X_test)
-        
-        last_pred = predictions[-1]
-        last_actual = X_test[-1][-1][0]
-        signal = (last_pred - last_actual) / last_actual if last_actual > 0 else 0
+            # Features: ['ret', 'rsi', 'macd', 'vol'] matched to Cloud
+            feat_cols = ['ret', 'rsi_norm', 'macd_norm', 'vol_roll']
+            feats = df_inf[feat_cols].fillna(0).values
+            
+            # Normalize (Instance Norm for inference)
+            feats = (feats - np.mean(feats, axis=0)) / (np.std(feats, axis=0) + 1e-6)
+            
+            X_seq = feats[-lookback:] # Last 60 days
+            if len(X_seq) == lookback:
+                X_tensor = torch.FloatTensor(X_seq).unsqueeze(0).to(device)
+                
+                model = ZeusTransformer(input_dim=4, d_model=128, nhead=8, num_layers=2, dropout=0.1).to(device)
+                
+                # Load weights (relaxed loading)
+                state = torch.load(model_path, map_location=device)
+                new_state = {}
+                for k, v in state.items():
+                    # Map 'transformer.layers' -> 'transformer_encoder.layers' if needed
+                    # Our ZeusTransformer uses 'transformer_encoder' but Cloud uses 'transformer'
+                    if 'transformer.layers' in k:
+                        new_key = k.replace('transformer.layers', 'transformer_encoder.layers')
+                    else:
+                        new_key = k
+                    new_state[new_key] = v
+                    
+                try:
+                    model.load_state_dict(new_state, strict=False)
+                    model.eval()
+                    with torch.no_grad():
+                        pred_log_ret = model(X_tensor).item()
+                    predicted_change = (np.exp(pred_log_ret) - 1) * 100
+                except:
+                    # Fallback if load fails
+                    pass
+
+        # 2. Fallback to LSTM if no model or load failed
+        if predicted_change == 0:
+            feature_cols = ['Close', 'Volume', 'RSI', 'MACD', 'SMA_50']
+            available_cols = [c for c in feature_cols if c in df.columns]
+            
+            scaler = MinMaxScaler(feature_range=(0, 1))
+            scaled_data = scaler.fit_transform(df[available_cols].values)
+            
+            train_data = scaled_data[:-5]
+            test_data = scaled_data[-lookback-5:]
+            
+            X_train, y_train = create_sequences(train_data, lookback)
+            X_test, y_test = create_sequences(test_data, lookback)
+            
+            if len(X_train) > 50:
+                model = ZeusLSTM(len(available_cols), 128, 2, dropout=0.2).to(device)
+                train_model(model, X_train, y_train, epochs=5, verbose=False) # Fast train
+                last_pred = predict(model, X_test)[-1]
+                last_actual = X_test[-1][-1][0]
+                predicted_change = ((last_pred - last_actual) / last_actual) * 100 if last_actual > 0 else 0
         
         # Trend check
         close = df['Close'].iloc[-1]
@@ -156,15 +199,13 @@ def scan_stock_initial(symbol: str, lookback: int = 60) -> Optional[Dict]:
         return {
             'symbol': symbol,
             'price': round(float(close), 2),
-            'signal_pct': round(float(signal * 100), 2),
+            'signal_pct': round(float(predicted_change), 2),
             'trend': trend,
             'rsi': round(float(df['RSI'].iloc[-1]), 1)
         }
         
     except Exception as e:
-        print(f"   ❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+        # print(f"   ❌ Error: {e}")
         return None
 
 
